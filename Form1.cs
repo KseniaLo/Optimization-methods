@@ -7,616 +7,599 @@ using System.Linq;
 using System.Text;
 using System.Windows.Forms;
 
-namespace Lab_5
+namespace Lab_3
 {
     public partial class Form1 : Form
     {
-        int n, m;
-        double[] u;//потенциалы
-        double[] v;//потенциалы
+        int[] x;//какие х'ы надо подставлять в функцию
+        string helpx = null;//х'ы для f~
+        double[] b;
+        double[,] A;
+        double[] cp;
+        double[] cj;
+        double[] delta;
+        double[] ep;
+        double[] min;
+        int[] xnum;//номера х'ов из колонки хБ
+        double[,] E;
+        double[,] Aunited;
+        double[] coeffs;
+        bool end = true, finish = false, minimum = false, maximum = false;
+        int n = 0, m = 0, leadingj = 0, leadingi = 0, morecounter = 0, equalcounter = 0;
+
         public Form1()
         {
             InitializeComponent();
         }
 
-        //создание таблицы для заполнения условий задачи
         private void button1_Click(object sender, EventArgs e)
         {
             dataGridView1.Rows.Clear();
             dataGridView1.Columns.Clear();
-            m = Convert.ToInt32(textBox1.Text);
-            n = Convert.ToInt32(textBox2.Text);
-            dataGridView1.ColumnCount = n + 2;
-            dataGridView1.RowCount = m + 2;
+            dataGridView2.Columns.Clear();
+            n = Convert.ToInt32(textBox1.Text);
+            m = Convert.ToInt32(textBox2.Text);
 
-            for (int j = 1; j < dataGridView1.ColumnCount - 1; j++)
-                dataGridView1.Rows[0].Cells[j].Value = "B" + j.ToString();
-            dataGridView1.Rows[0].Cells[dataGridView1.ColumnCount - 1].Value = "Запасы";
-            for (int i = 1; i < dataGridView1.RowCount - 1; i++)
-                dataGridView1.Rows[i].Cells[0].Value = "A" + i.ToString();
-            dataGridView1.Rows[dataGridView1.RowCount - 1].Cells[0].Value = "Потребности";
-            button2.Visible = true;
+            dataGridView1.ColumnCount = 2 * n + 2;
+            dataGridView1.RowCount = m;
+            dataGridView2.ColumnCount = 2 * n;
+            dataGridView2.RowCount = 1;
+
+            for (int j = 0; j < dataGridView1.ColumnCount - 2; j++)
+            {
+                for (int i = 0; i < dataGridView1.RowCount; i++)
+                {
+                    if (j % 2 != 0)
+                    {
+                        dataGridView1.Rows[i].Cells[j].Value = "x" + ((j + 1) / 2).ToString();
+                        dataGridView2.Rows[0].Cells[j].Value = "x" + ((j + 1) / 2).ToString();
+                    }
+                    else
+                        if (j >= 1)
+                            dataGridView1.Rows[i].Cells[j - 1].Value += "+";
+                }
+            }
             button2.Enabled = true;
+            button2.Visible = true;
+            x = new int[n];
+            for (int i = 0; i < n; i++)
+                x[i] = i + 1;
+            xnum = new int[m];
+            A = new double[m, n];
+            b = new double[m];
+            min = new double[m];
+            coeffs = new double[n];
         }
-
-        //решение поставленной задачи
         private void button2_Click(object sender, EventArgs e)
         {
-            double[,] Goods;//товары
-            double[,] Price;//стоимость
-            double[] Holdings;//запасы
-            double[] Needs;//потребности
-            
-            //проверка на невырожденность
-            double sumNeeds = 0, sumHoldings = 0;
-            for (int i = 1; i < dataGridView1.RowCount - 1; i++)
-                sumHoldings += Convert.ToDouble(dataGridView1.Rows[i].Cells[dataGridView1.ColumnCount-1].Value);
-            for (int j = 1; j < dataGridView1.ColumnCount - 1; j++)
-                sumNeeds += Convert.ToDouble(dataGridView1.Rows[dataGridView1.RowCount - 1].Cells[j].Value);
-            if (sumHoldings < sumNeeds)
-                m++;
-            if (sumNeeds < sumHoldings)
-                n++;
-
-            //задание таблиц
-            Price = new double[m, n];
-            Goods = new double[m, n];
-            Holdings = new double[m];
-            Needs = new double[n];
-            u = new double[m];
-            v = new double[n];
-
-            //загрузка данных из таблицы
-            FillIn(n, m, Price, Holdings, Needs);
-            
-            //строим опорный план
-            Goods = NorthWestCorner(n, m, Goods, Price, Holdings, Needs);
-
-            //расчитываем потенциалы
-            UandV(n, m, Goods, Price);
-
-            //решаем задачу
-            Goods = Potentials(n, m, Goods, Price, Holdings, Needs);
-
-            Output(n, m, Goods, Price, Holdings, Needs);
-
-            string output = "Целевая функция: f(x)= "+f(n,m,Goods,Price).ToString();
-
-            richTextBox1.AppendText(output);
-        }
-
-        //загрузка данных из таблицы
-        public void FillIn(int n, int m, double[,] Price, double[] Holdings, double[] Needs)
-        {
-            double sumNeeds = 0, sumHoldings = 0;
-            for (int i = 1; i < dataGridView1.RowCount - 1; i++)
-                sumHoldings += Convert.ToDouble(dataGridView1.Rows[i].Cells[dataGridView1.ColumnCount - 1].Value);
-            for (int j = 1; j < dataGridView1.ColumnCount; j++)
-                sumNeeds += Convert.ToDouble(dataGridView1.Rows[dataGridView1.RowCount - 1].Cells[j].Value);
-            
-            //задание таблиц
-            for (int i = 1; i < dataGridView1.RowCount - 1; i++)
-                for (int j = 1; j < dataGridView1.ColumnCount-1; j++)
-                    Price[i - 1, j - 1] = Convert.ToDouble(dataGridView1.Rows[i].Cells[j].Value);
-            for (int i = 1; i < dataGridView1.RowCount - 1; i++)
-                Holdings[i - 1] = Convert.ToDouble(dataGridView1.Rows[i].Cells[dataGridView1.ColumnCount - 1].Value);
-            for (int j = 1; j < dataGridView1.ColumnCount-1; j++)
-                Needs[j - 1] = Convert.ToDouble(dataGridView1.Rows[dataGridView1.RowCount - 1].Cells[j].Value);
-
-            if (sumHoldings < sumNeeds)
+            if (radioButton1.Checked)
+                maximum = true;
+            if (radioButton2.Checked)
+                minimum = true;
+            if (maximum == false && minimum == false)
             {
-                for (int j = 0; j < n; j++)
-                    Price[m - 1, j] = 0;
-                Holdings[m - 1] = sumNeeds - sumHoldings;
+                MessageBox.Show("Выберите экстремум!");
             }
-            if (sumNeeds < sumHoldings)
+            else
             {
-                for (int i = 0; i < m; i++)
-                    Price[i, n - 1] = 0;
-                Needs[n - 1] = sumHoldings - sumNeeds;
-            }
-        }
+                FillIn(n, m, A, E, b);
+                cp = new double[m + morecounter + n];
+                cj = new double[m];
+                ep = new double[n + m + 1 + morecounter];
+                delta = new double[n + m + morecounter];
+                for (int i = 0; i < dataGridView2.ColumnCount; i++)
+                    if (i % 2 == 0)
+                        coeffs[i / 2] = Convert.ToDouble(dataGridView2.Rows[0].Cells[i].Value);
+                CpCj();
 
-        //метод северо-западного угла для поиска опорного плана
-        public double[,] NorthWestCorner(int n, int m, double[,] Goods, double[,] Price, double[] Holdings, double[] Needs)
-        {
-            double[] Holdings1 = new double[Holdings.Length];
-            double[] Needs1 = new double[Needs.Length];
-            for (int k = 0; k < Holdings.Length; k++)
-                Holdings1[k] = Holdings[k];
-            for (int k = 0; k < Needs.Length; k++)
-                Needs1[k] = Needs[k];
+                dataGridView1.ColumnCount = n + m + 3 + morecounter;
+                dataGridView1.RowCount = m + 3;
 
-            int i = 0, j = 0;
-            Goods[0, 0] = Math.Min(Holdings1[0], Needs1[0]);
-            while (i < m && j < n)
-            {
-                if (Holdings1[i] - Goods[i, j] == 0 && Needs1[j] - Goods[i, j] == 0)//при одновременном закрытии столбца и строки
+                //считаем дельту по схеме1
+                delta = delta1(delta, Aunited, cp, cj, n, m);
+
+                //поиск дельта>0
+                end = PositiveDelta(delta, end);
+                Show(xnum, b, Aunited, min, delta, ep, n, m, finish);
+
+                //если такая дельта найдена
+
+                if (end == false)
                 {
-                    for (int k = j + 1; k < n; k++)
-                        Goods[i, k] = -1;
-                    for (int k = i + 1; k < m; k++)
-                        Goods[k, j] = -1;
-                    i++;
-                    j++;
-                    Goods[i, j] = Math.Min(Holdings1[i], Needs1[j]);
-                }
-                else
-                {
-                    if (Holdings1[i] - Goods[i, j] == 0)//если закрылась строка
+                    //поиск ведущего столбца
+                    leadingj = LeadingJ(delta);
+
+                    if (LeadingJCheck(Aunited, leadingj) == false)
                     {
-                        for (int k = j + 1; k < n; k++)
-                            Goods[i, k] = -1;
-                        Holdings1[i] -= Holdings1[i];
-                        i++;
-                        Needs1[j] -= Goods[i - 1, j];
-                        Goods[i, j] = Math.Min(Needs1[j], Holdings1[i]);
+                        richTextBox1.AppendText("Задача не имеет решения");
+                        button3.Enabled = false;
+                        button3.Visible = false;
                     }
-                    else//если закрылся столбец
-                    {
-                        for (int k = i + 1; k < m; k++)
-                            Goods[k, j] = -1;
-                        Needs1[j] -= Needs1[j];
-                        j++;
-                        Holdings1[i] -= Goods[i, j - 1];
-                        Goods[i, j] = Math.Min(Holdings1[i], Needs1[j]);
-                    }
-                }
-                if (Goods[m - 1, n - 1] != 0)
-                    break;
-            }
-            //проверяем план на невырожденность
-            Goods = Degenerate(n, m, Goods, Price);
-
-            return Goods;
-        }
-
-        //проверка плана на невырожденность с помощью равенства n+m-1
-        public double[,] Degenerate(int n, int m, double[,] Goods, double[,] Price)
-        {
-            int amount = 0, i = 0, j = 0;//количество загруженных клеток
-            for (i = 0; i < m; i++)
-                for (j = 0; j < n; j++)
-                    if (Goods[i, j] != -1)
-                        amount++;
-            if (amount != (m + n - 1))//если план вырожденный
-            {
-                int count = 0;
-                i = 0;
-                while (amount != (m + n - 1))
-                {
-                    for (j = 0; j < n; j++)
-                    {
-                        if (Goods[i, j] != -1)
-                            count++;
-                    }
-                    if (count <= 2)
-                    {
-                        double minj = 10E16, min = 10E16;
-                        for (j = 0; j < n; j++)
-                            if (Price[i, j] < min && Goods[i, j] == -1)
-                            {
-                                minj = j;
-                                min = Price[i, j];
-                            }
-                        Goods[i, (int)minj] = 0;
-                    }
-                    count = 0;
-                    amount = 0;
-                    for (int k = 0; k < m; k++)
-                        for (j = 0; j < n; j++)
-                            if (Goods[k, j] != -1)
-                                amount++;
-                    i++;
-                }
-            }
-            return Goods;
-        }
-
-        //метод потенциалов решения задачи
-        public double[,] Potentials(int n, int m, double[,] Goods, double[,] Price, double[] Holdings, double[] Needs)
-        {
-            bool end = false;//окончание алгоритма
-            double[,] delta = new double[m, n];//относительные оценки для клеток                    
-            List<Way> NewWay = new List<Way>();
-
-            while (end == false)
-            {
-                for (int i = 0; i < m; i++)
-                    for (int j = 0; j < n; j++)
-                        if (Goods[i, j] == -1)//если клетка свободна
-                            delta[i, j] = Price[i, j] - (u[i] + v[j]);//считаем для нее относительную оценку
-                
-                //поиск наименьшей из отрицательных оценок, если такая существует
-                int foundi = -1, foundj = -1, k = 0;
-                double error = 0;
-                while (k < m)//проходим по всем строкам
-                {
-                    for (int j = 0; j < n; j++)
-                    {
-                        if (delta[k, j] < 0 && delta[k, j] <= error)//если оценка отрицательна и меньше другой найденной отрицательной оценки
-                        {
-                            error = delta[k, j];
-                            foundi = k;
-                            foundj = j;
-                        }
-                    }
-                    k++;
-                }
-                if (foundi < 0)
-                    end = true;
-                if (end != true)
-                {
-                    NewWay.Add(new Way(foundi, foundj));
-                    int wayi = foundi, wayj = foundj;
-
-                    //задание цикла
-                    do
-                    {
-                        int countrows = 1, countcolumns = 1;
-                        bool horizontal = false, vertical = false;
-
-                        if (NewWay.Count >= 2)
-                        {
-                            if (NewWay[NewWay.Count - 1].I == wayi && NewWay[NewWay.Count - 2].I == wayi)//если уже выбрано 2 узла в строке
-                                countrows = 2;
-                            if (NewWay[NewWay.Count - 1].J == wayj && NewWay[NewWay.Count - 2].J == wayj)//если уже выбрано 2 узла в столбце
-                                countcolumns = 2;
-                        }
-                        else
-                            countrows = 2;
-
-                        if (countrows == 2)
-                        {                                                                  
-                            vertical = true;
-                            if (NextStepUp(wayi, wayj, Goods) != -1 && (NextStepLeft(NextStepUp(wayi, wayj, Goods), wayj, Goods) != -1 || NextStepRight(NextStepUp(wayi, wayj, Goods), wayj, Goods) != -1) || NextStepUp(wayi, wayj, Goods) == foundi)
-                                wayi = NextStepUp(wayi, wayj, Goods);
-                            else
-                                if (NextStepDown(wayi, wayj, Goods) != -1 && (NextStepLeft(NextStepDown(wayi, wayj, Goods), wayj, Goods) != -1 || NextStepRight(NextStepDown(wayi, wayj, Goods), wayj, Goods) != -1) || NextStepDown(wayi, wayj, Goods) == foundi)
-                                    wayi = NextStepDown(wayi, wayj, Goods);
-                        }
-                        else
-                            if (countcolumns == 2)
-                            {                                    
-                                horizontal = true;
-                                if (NextStepRight(wayi, wayj, Goods) != -1 && (NextStepDown(wayi, NextStepRight(wayi, wayj, Goods), Goods) != -1 || NextStepUp(wayi, NextStepRight(wayi, wayj, Goods), Goods) != -1))
-                                    wayj = NextStepRight(wayi, wayj, Goods);
-                                else
-                                    if (NextStepLeft(wayi, wayj, Goods) != -1 && (NextStepDown(wayi, NextStepLeft(wayi, wayj, Goods), Goods) != -1 || NextStepUp(wayi, NextStepLeft(wayi, wayj, Goods), Goods) != -1))
-                                        wayj = NextStepLeft(wayi, wayj, Goods);
-                            }
-                        if (wayi != NewWay[NewWay.Count - 1].I || wayj != NewWay[NewWay.Count - 1].J)
-                            NewWay.Add(new Way(wayi, wayj));
-                        else
-                        {
-                            if (horizontal == true)
-                            {
-                                if (NextStepRight(wayi, wayj + 1, Goods) != -1)
-                                    wayj = NextStepRight(wayi, wayj + 1, Goods);
-                                else
-                                {
-                                    if (NextStepLeft(wayi, wayj - 1, Goods) != -1)
-                                        wayj = NextStepLeft(wayi, wayj - 1, Goods);
-                                    else
-                                    {
-                                        if (NewWay[NewWay.Count - 2].I > NewWay[NewWay.Count - 1].I)
-                                        {
-                                            wayi = NextStepUp(wayi, wayj, Goods);
-                                            NewWay.RemoveAt(NewWay.Count - 1);
-                                        }
-                                        else
-                                        {
-                                            wayi = NextStepDown(wayi, wayj, Goods);
-                                            NewWay.RemoveAt(NewWay.Count - 1);
-                                        }
-                                    }
-                                }
-                            }
-                            else
-                            {
-                                if (NextStepDown(wayi + 1, wayj, Goods) != -1)
-                                    wayi = NextStepDown(wayi + 1, wayj, Goods);
-                                else
-                                {
-                                    if (NextStepUp(wayi - 1, wayj, Goods) != -1)
-                                        wayi = NextStepUp(wayi - 1, wayj, Goods);
-                                    else
-                                    {
-                                        if (NewWay[NewWay.Count - 2].J > NewWay[NewWay.Count - 1].J)
-                                        {
-                                            wayj = NextStepLeft(wayi, wayj, Goods);
-                                            NewWay.RemoveAt(NewWay.Count - 1);
-                                        }
-                                        else
-                                        {
-                                            wayj = NextStepRight(wayi, wayj, Goods);
-                                            NewWay.RemoveAt(NewWay.Count - 1);
-                                        }
-                                    }
-                                }
-                            }
-                            NewWay.Add(new Way(wayi, wayj));
-                        }
-                    }
-                    while (foundi != wayi);
-
-
-                    //поиск минимального в отрицательных узлах
-                    double min=10E16;
-                    for (int i = 0; i < NewWay.Count; i++)
-                        if (Goods[NewWay[i].I, NewWay[i].J] <= min && Goods[NewWay[i].I, NewWay[i].J] != -1 && i % 2 != 0)
-                            min = Goods[NewWay[i].I, NewWay[i].J];
-
-                    for (int i = 0; i < NewWay.Count; i++)
-                        if (i % 2 == 0)
-                            if (Goods[NewWay[i].I, NewWay[i].J] == -1)
-                                Goods[NewWay[i].I, NewWay[i].J] = min;
-                            else
-                                Goods[NewWay[i].I, NewWay[i].J] += min;
-                        else
-                        {
-                            Goods[NewWay[i].I, NewWay[i].J] -= min;
-                            if (Goods[NewWay[i].I, NewWay[i].J] == 0)
-                                Goods[NewWay[i].I, NewWay[i].J] = -1;
-                        }
-
-                    Degenerate(n,m,Goods,Price);
-
-                    //пересчет потенциалов
-                    UandV(n, m, Goods, Price);
-                }
-                NewWay.Clear();
-                for (int i = 0; i < m; i++)
-                    for (int j = 0; j < n; j++)
-                        delta[i, j] = 0;
-            }
-            return Goods;
-        }
-
-        public int NextStepDown(int k, int j, double[,] Goods)
-        {
-            int foundi = -1;
-            for(int i=k+1;i<m;i++)
-                if (Goods[i, j] != -1)
-                {
-                    foundi = i;
-                    break;
-                }
-            return foundi;
-        }
-
-        public int NextStepUp(int k, int j, double[,] Goods)
-        {
-            int foundi = -1;
-            for (int i = k - 1; i >= 0; i--)
-                if (Goods[i, j] != -1)
-                {
-                    foundi = i;
-                    break;
-                }
-            return foundi;
-        }
-
-        public int NextStepRight(int i, int k, double[,] Goods)
-        {
-            int foundj = -1;
-            for (int j = k + 1; j < n; j++)
-                if (Goods[i, j] != -1)
-                {
-                    foundj = j;
-                    break;
-                }
-            return foundj;
-        }
-
-        public int NextStepLeft(int i, int k, double[,] Goods)
-        {
-            int foundj = -1;
-            for (int j = k - 1; j >= 0; j--)
-                if (Goods[i, j] != -1)
-                {
-                    foundj = j;
-                    break;
-                }
-            return foundj;
-        }
-
-        //подсчет потенциалов
-        public void UandV(int n, int m, double[,] Goods, double[,] Price)
-        {
-            for (int i = 0; i < m; i++)
-                u[i] = 0;
-            for (int j = 0; j < n; j++)
-                v[j] = 0;
-
-            int foundi = 0;
-            List<UV> newUV = new List<UV>();//создаем список индексов для загруженных клеток
-            int t = 0, tt = 0;
-            while (t <= (m - 1) || tt <= (n - 1))
-            {                
-                if (t < m && tt < n)
-                {
-                    for (int k = tt; k < n; k++)
-                        if (Goods[t, k] != -1)//если клетка загружена
-                            newUV.Add(new UV(t, k, false, false));//добавляем ее координаты в список
-                    for (int k = t + 1; k < m; k++)
-                        if (Goods[k, tt] != -1)//если клетка загружена
-                            newUV.Add(new UV(k, tt, false, false));//добавляем ее координаты в список
-                }
-                else
-                    if (t == m - 1 && tt == n - 2)
-                        tt++;
-                t++;
-                tt++;
-
-            }
-
-            //ищем первую строку, в которой будет >=2 загруженных клеток
-            for (int i = 0; i < m; i++)
-            {
-                int count = 0;
-                for (int j = 0; j < n; j++)
-                {
-                    if (Goods[i, j] != -1)
-                        count++;
-                }
-                if (count >= 2)
-                {
-                    foundi = i;
-                    break;
-                }
-            }
-
-            //после того, как такая строка найдена
-            for (int i = 0; i < m; i++)
-                if (i == foundi)
-                {
-                    u[i] = 0;//ставим в соответствие потенциалу этой строки 0
-                    for (int k = 0; k < newUV.Count; k++)
-                    {
-                        if (newUV[k].I == foundi)
-                            newUV[k].IEXIST = true;// и отмечаем, что эта строка проверена                       
-                    }
-                }
-
-            bool allichecked = true, alljchecked = true;
-
-            do
-            {
-                for (int k = 0; k < newUV.Count; k++)
-                {
-                    if (newUV[k].IEXIST == true)//если строка проверена
-                    {
-                        v[newUV[k].J] = Price[newUV[k].I, newUV[k].J] - u[newUV[k].I];//находим потенциал столбца
-                        int j = newUV[k].J;
-                        for (int p = 0; p < newUV.Count; p++)
-                            if (newUV[p].J == j)
-                                newUV[p].JEXIST = true;
-                    }
-                    if (newUV[k].JEXIST == true)//если проверен столбец
-                        {
-                            u[newUV[k].I] = Price[newUV[k].I, newUV[k].J] - v[newUV[k].J];//находим потенциал строки
-                            int i = newUV[k].I;
-                            for (int p = 0; p < newUV.Count; p++)
-                                if (newUV[p].I == i)
-                                    newUV[p].IEXIST = true;
-                        }
-                }
-                allichecked = true; alljchecked = true;
-                for (int k = 0; k < newUV.Count; k++)
-                {
-                    if (newUV[k].IEXIST == false)
-                    {
-                        allichecked = false;
-                        break;
-                    }
-                    if (newUV[k].JEXIST == false)
-                    {
-                        alljchecked = false;
-                        break;
-                    }
-                }
-            } 
-            while (allichecked == false || alljchecked == false);
-
-            newUV.Clear();
-        }
-
-        public void Output(int n, int m, double[,] Goods, double[,] Price, double[] Holdings, double[] Needs)
-        {
-            dataGridView1.ColumnCount = n + 3;
-            dataGridView1.RowCount = m + 3;
-
-            for (int j = 1; j < dataGridView1.ColumnCount - 2; j++)
-                dataGridView1.Rows[0].Cells[j].Value = "B" + j.ToString();
-            dataGridView1.Rows[0].Cells[dataGridView1.ColumnCount - 2].Value = "Запасы";
-            dataGridView1.Rows[0].Cells[dataGridView1.ColumnCount - 1].Value = "u";
-            for (int i = 1; i < dataGridView1.RowCount - 2; i++)
-                dataGridView1.Rows[i].Cells[0].Value = "A" + i.ToString();
-            dataGridView1.Rows[dataGridView1.RowCount - 2].Cells[0].Value = "Потребности";
-            dataGridView1.Rows[dataGridView1.RowCount - 1].Cells[0].Value = "v";
-
-            for (int i = 1; i < dataGridView1.RowCount - 2; i++)
-                for (int j = 1; j < dataGridView1.ColumnCount - 2; j++)
-                    if (Goods[i - 1, j - 1] != -1)
-                        dataGridView1.Rows[i].Cells[j].Value = Goods[i - 1, j - 1].ToString() + "[" + Price[i - 1, j - 1].ToString() + "] ";
                     else
-                        dataGridView1.Rows[i].Cells[j].Value = "[" + Price[i - 1, j - 1].ToString() + "] ";
+                    {
+                        //расчет минимума
+                        min = Minimum(Aunited, b, min, leadingj, m);
 
-            for (int i = 1; i < dataGridView1.RowCount - 2; i++)
-                dataGridView1.Rows[i].Cells[dataGridView1.ColumnCount - 2].Value = Holdings[i - 1].ToString();
+                        //поиск ведущей строки
+                        leadingi = LeadingI(min, m);
 
-            for (int i = 1; i < dataGridView1.RowCount - 2; i++)
-                dataGridView1.Rows[i].Cells[dataGridView1.ColumnCount - 1].Value = u[i - 1].ToString();
+                        //считаем эпсилон
+                        ep = Epsilon(Aunited, b, leadingi, leadingj, n, m);
 
-            for (int j = 1; j < dataGridView1.ColumnCount - 2; j++)
-                dataGridView1.Rows[dataGridView1.RowCount - 2].Cells[j].Value = Needs[j - 1].ToString();
+                        //вывод таблицы на экран
+                        Show(xnum, b, Aunited, min, delta, ep, n, m, finish);
 
-            for (int j = 1; j < dataGridView1.ColumnCount - 2; j++)
-                dataGridView1.Rows[dataGridView1.RowCount - 1].Cells[j].Value = v[j - 1].ToString();
+                        button3.Enabled = true;
+                        button3.Visible = true;
+                    }
+                }
+                else
+                {
+                    finish = true;
+                    string answer = null;
+                    if (morecounter == 0)
+                        answer += "Максимум функции: " + f(xnum, b, n, m, coeffs) + "\n";
+                    richTextBox1.AppendText(answer);
+                    Show(xnum, b, Aunited, min, delta, ep, n, m, finish);
+                }
+            }
         }
-
-        //целевая функция
-        public double f(int n, int m, double[,] Goods, double[,] Price)
+        private void button3_Click(object sender, EventArgs e)
         {
-            double sum = 0;
+            button2.Enabled = false;
+            button2.Visible = false;
+            if (finish == false)
+            {
 
+                //замена имени переменной в ХБ
+                xnum[leadingi] = leadingj + 1;
+
+                //пересчет значений таблицы
+                NewTable(b, Aunited, min, delta, ep, leadingi, leadingj, n, m);
+                leadingj = LeadingJ(delta);
+                end = PositiveDelta(delta, end);
+
+                if (end == true)
+                {
+                    finish = true;
+                    string answer = null;
+                    if (morecounter == 0 && equalcounter == 0)
+                        if (maximum == true)
+                            answer += "Максимум функции: " + f(xnum, b, n, m, coeffs) + "\n";
+                        else
+                            answer += "Минимум функции: " + f(xnum, b, n, m, coeffs) + "\n";
+                    else
+                    {
+                        if (ff(xnum, b, n, m, helpx) == 0)
+                        {
+                            finish = false;
+
+                            for (int i = 0; i < coeffs.Length; i++)
+                            {
+                                if (maximum == true)
+                                    cp[i] = coeffs[i];
+                                else
+                                {
+                                    if (minimum == true)
+                                        cp[i] = -1 * coeffs[i];
+                                }
+                            }
+                            for (int i = n; i < n + m + morecounter; i++)
+                                cp[i] = 0;
+                            for (int j = 0; j < n + m + morecounter; j++)
+                                for (int i = 0; i < m; i++)
+                                {
+                                    if (xnum[i] - 1 == j)
+                                        cj[i] = cp[j];
+                                }
+                            //morecounter = 0;
+                            delta = delta1(delta, Aunited, cp, cj, n, m);
+                            end = PositiveDelta(delta, end);
+                            if (end == true)
+                                finish = true;
+                            while (finish == false)
+                            {
+                                leadingj = LeadingJ(delta);
+                                if (LeadingJCheck(Aunited, leadingj) == false)
+                                {
+                                    answer += "Задача не имеет решения";
+                                    button3.Enabled = false;
+                                    button3.Visible = false;
+                                    finish = true;
+                                }
+                                else
+                                {
+                                    min = Minimum(Aunited, b, min, leadingj, m);
+                                    leadingi = LeadingI(min, m);
+                                    ep = Epsilon(Aunited, b, leadingi, leadingj, n, m);
+                                    xnum[leadingi] = leadingj + 1;
+                                    NewTable(b, Aunited, min, delta, ep, leadingi, leadingj, n, m);
+                                    end = PositiveDelta(delta, end);
+                                    if (end == true)
+                                        finish = true;
+                                }
+
+                                if (end == true)
+                                {
+                                    finish = true;
+                                    if (maximum == true)
+                                    answer += "Максимум функции: " + f(xnum, b, n, m, coeffs) + "\n";
+                                    else
+                                        answer += "Минимум функции: " + f(xnum, b, n, m, coeffs) + "\n";
+                                }
+                            }
+                        }
+                        else
+                            answer += "Задача не имеет решения";
+                    }
+                    richTextBox1.AppendText(answer);
+                    Show(xnum, b, Aunited, min, delta, ep, n, m, finish);
+                }
+                else
+                {
+                    leadingj = LeadingJ(delta);
+                    if (LeadingJCheck(Aunited, leadingj) == false)
+                    {
+                        richTextBox1.AppendText("Задача не имеет решения");
+                        button3.Enabled = false;
+                        button3.Visible = false;
+                    }
+                    else
+                    {
+                        min = Minimum(Aunited, b, min, leadingj, m);
+                        leadingi = LeadingI(min, m);
+                        ep = Epsilon(Aunited, b, leadingi, leadingj, n, m);
+                        Show(xnum, b, Aunited, min, delta, ep, n, m, finish);
+                    }
+                }
+
+            }
+            if (end == true)
+            {
+                button3.Enabled = false;
+                button3.Visible = false;
+            }
+        }
+        public void FillIn(int n, int m, double[,] A, double[,] E, double[] b)//Считывание данных
+        {
+            for (int i = 0; i < dataGridView1.RowCount; i++)// заполнение массива коэффициентов ограничений A
+            {
+                for (int j = 0; j < n * 2; j++)
+                {
+                    if (j % 2 == 0)
+                        A[i, j / 2] = Convert.ToDouble(dataGridView1.Rows[i].Cells[j].Value);
+                }
+            }
+            for (int i = 0; i < m; i++)// проверка правой части ограничений на >=0
+            {
+                if (Convert.ToInt32(dataGridView1.Rows[i].Cells[2 * n + 1].Value) < 0)// если проверяемое значение <0
+                {
+                    for (int j = 0; j < n; j++)// во всей строке меняем знаки
+                        A[i, j] *= -1;
+                    dataGridView1.Rows[i].Cells[2 * n + 1].Value = -1 * Convert.ToInt32(dataGridView1.Rows[i].Cells[2 * n + 1].Value);
+                    if (String.Compare(dataGridView1.Rows[i].Cells[2 * n].Value.ToString(), "<=") == 0)// если стоял <=
+                        dataGridView1.Rows[i].Cells[2 * n].Value = ">=";//меняем на >=
+                    else
+                    {
+                        if (String.Compare(dataGridView1.Rows[i].Cells[2 * n].Value.ToString(), ">=") == 0)// если стоял >=
+                            dataGridView1.Rows[i].Cells[2 * n].Value = "<=";//меняем на <=
+                    }
+                }
+            }
+            for (int i = 0; i < m; i++)//заполняем значения ограничений
+                b[i] = Convert.ToDouble(dataGridView1.Rows[i].Cells[2 * n + 1].Value);
+
+            for (int i = 0; i < m; i++)//считаем сколько получилось знаков >= и =
+            {
+                if (String.Compare(dataGridView1.Rows[i].Cells[2 * n].Value.ToString(), ">=") == 0)
+                    morecounter++;
+                if (String.Compare(dataGridView1.Rows[i].Cells[2 * n].Value.ToString(), "=") == 0)
+                    equalcounter++;
+            }
+
+            if (morecounter == 0 && equalcounter == 0)
+            {
+                E = new double[m, m];
+                for (int i = 0; i < m; i++)
+                    for (int j = 0; j < m; j++)
+                    {
+                        if (i == j)
+                            E[i, j] = 1;
+                        else
+                            E[i, j] = 0;
+                    }
+
+                //Объединяем матицы, чтобы были столбцы с У1 по Уn+m
+                Aunited = new double[m, m + n];
+                for (int i = 0; i < m; i++)
+                    for (int j = 0; j < m + n; j++)
+                    {
+                        if (j < n)
+                            Aunited[i, j] = A[i, j];
+                        else
+                            Aunited[i, j] = E[i, j - n];
+                    }
+                for (int i = 0; i < m; i++)
+                    xnum[i] = i + n + 1;
+            }
+            else
+            {
+                int j = 0; string help = null;
+                E = new double[m, m + morecounter];//добавляем переменные для канонического вида системы 
+                for (int i = 0; i < m; i++)
+                {
+                    if (String.Compare(dataGridView1.Rows[i].Cells[2 * n].Value.ToString(), "<=") == 0)
+                    {
+                        for (int k = 0; k < m; k++)
+                        {
+                            if (i == k)
+                                E[k, j] = 1;
+                            else
+                                E[k, j] = 0;
+                        }
+                        help += j + 1 + n;
+                        j++;
+                    }
+                    if (String.Compare(dataGridView1.Rows[i].Cells[2 * n].Value.ToString(), ">=") == 0)
+                    {
+                        for (int k = 0; k < m; k++)
+                        {
+                            if (i == k)
+                                E[k, j] = -1;
+                            else
+                                E[k, j] = 0;
+                        }
+                        j++;
+                    }
+                }
+
+                for (int i = 0; i < m; i++)
+                {
+                    if (String.Compare(dataGridView1.Rows[i].Cells[2 * n].Value.ToString(), ">=") == 0 || String.Compare(dataGridView1.Rows[i].Cells[2 * n].Value.ToString(), "=") == 0)
+                    {
+                        helpx += (j + 1 + n).ToString();
+                        if (help == null)
+                            help += (j + 1 + n).ToString();
+                        else
+                            help = help.Insert(i, (j + 1 + n).ToString());
+                        for (int k = 0; k < m; k++)
+                        {
+                            if (i == k)
+                                E[k, j] = 1;
+                            else
+                                E[k, j] = 0;
+                        }
+                        j++;
+                    }
+                }
+
+                //Объединяем матицы, чтобы были столбцы с У1 по Уn+m+morecounter
+                Aunited = new double[m, m + n + morecounter];
+                for (int i = 0; i < m; i++)
+                    for (int k = 0; k < m + n + morecounter; k++)
+                    {
+                        if (k < n)
+                            Aunited[i, k] = A[i, k];
+                        else
+                            Aunited[i, k] = E[i, k - n];
+                    }
+
+                for (int i = 0; i < help.Length; i++)
+                    xnum[i] = Convert.ToInt32(help[i].ToString());
+            }
+        }
+        public void CpCj()
+        {
+            if (morecounter == 0 && equalcounter == 0)
+            {
+                for (int i = 0; i < n; i++)
+                    if (i % 2 == 0)
+                        cp[i / 2] = Convert.ToDouble(dataGridView2.Rows[0].Cells[i].Value);
+                for (int i = 0; i < m; i++)
+                    cj[i] = 0;
+            }
+            else
+            {
+                for (int j = 0; j < n + m + morecounter; j++)
+                    for (int k = 0; k < helpx.Length; k++)
+                        if (Convert.ToInt32(helpx[k].ToString()) - 1 == j)
+                            cp[j] = -1;
+
+
+                for (int j = 0; j < n + m + morecounter; j++)
+                    for (int i = 0; i < m; i++)
+                    {
+                        if (xnum[i] - 1 == j)
+                            cj[i] = cp[j];
+                    }
+            }
+
+
+        }
+        public double[] delta1(double[] _delta, double[,] Aunited, double[] cp, double[] cj, int n, int m)//считается от объединенных A и E
+        {
+            for (int j = 0; j < _delta.Length - 1; j++)
+            {
+                double sum = 0;
+                for (int i = 0; i < m; i++)
+                    sum += Aunited[i, j] * cj[i];
+                _delta[j] = cp[j] - sum;
+            }
+            return _delta;
+        }
+        public bool PositiveDelta(double[] delta, bool end)
+        {
+            for (int j = 0; j < delta.Length; j++)
+            {
+                if (delta[j] > 0)
+                {
+                    end = false;
+                    break;
+                }
+                else
+                    end = true;
+            }
+            return end;
+        }
+        public int LeadingJ(double[] _delta)
+        {
+            int leadingj = 0;
+            double maxvalue = 0;
+            for (int j = 0; j < _delta.Length; j++)
+                if (_delta[j] > 0)
+                {
+                    if (_delta[j] > maxvalue)
+                    {
+                        maxvalue = _delta[j];
+                        leadingj = j;
+                    }
+                }
+            return leadingj;
+        }
+        public bool LeadingJCheck(double[,] Aunited, int leadingj)
+        {
+            bool allneg = true;
             for (int i = 0; i < m; i++)
-                for (int j = 0; j < n; j++)
-                    if (Goods[i, j] != -1)
-                        sum += Goods[i, j] * Price[i, j];
+                if (Aunited[i, leadingj] > 0)
+                {
+                    allneg = false;
+                    break;
+                }
+            if (allneg == true)
+                return false;
+            else
+                return true;
+        }
+        public int LeadingI(double[] min, int m)
+        {
+            int leadingi = 0;
+            double tmp = 10E16;
+            for (int i = 0; i < m; i++)
+            {
+                if (min[i] < tmp && min[i] != -1)
+                {
+                    leadingi = i;
+                    tmp = min[i];
+                }
+            }
+            return leadingi;
+        }
+        public double[] Minimum(double[,] Aunited, double[] b, double[] min, int leadingj, int m)
+        {
+            for (int i = 0; i < m; i++)
+            {
+                if (Aunited[i, leadingj] > 0)
+                    min[i] = b[i] / Aunited[i, leadingj];
+                else
+                    min[i] = -1;//чтобы можно было пропускать эти значения при выборе минимума
+            }
+            return min;
+        }
+        public double[] Epsilon(double[,] Aunited, double[] b, int leadingi, int leadingj, int n, int m)
+        {
+            ep[0] = b[leadingi] / Aunited[leadingi, leadingj];
+            for (int j = 0; j < m + n + morecounter; j++)
+                ep[j + 1] = Aunited[leadingi, j] / Aunited[leadingi, leadingj];
+            return ep;
+        }
+        public void NewTable(double[] b, double[,] Aunited, double[] min, double[] delta, double[] ep, int leadingi, int leadingj, int n, int m)
+        {
+            //замена ведущей строки на строку-эпсилон
+            b[leadingi] = ep[0];
+            for (int j = 0; j < n + m + morecounter; j++)
+                Aunited[leadingi, j] = ep[j + 1];
 
-            return sum;
-        }
-    }
+            //пересчет значений таблицы
+            double[] tmp = new double[m + 1];
+            for (int i = 0; i < m; i++)
+                tmp[i] = Aunited[i, leadingj];
+            tmp[m] = delta[leadingj];
+            for (int i = 0; i < m; i++)
+            {
+                if (i != leadingi)
+                    b[i] -= ep[0] * tmp[i];
+            }
+            for (int j = 0; j < n + m + morecounter; j++)
+                for (int i = 0; i < m; i++)
+                {
+                    if (i != leadingi)
+                        Aunited[i, j] -= ep[j + 1] * tmp[i];
+                }
 
-    class UV//для задания матрицы потенциалов по загруженным клеткам
-    {
-        int i, j;
-        bool iexist, jexist;
-        public UV(int i, int j, bool iexist, bool jexist)
-        {
-            this.i = i;
-            this.j = j;
-            this.iexist = iexist;
-            this.jexist = jexist;
+            //пересчет значений дельта по схеме2
+            for (int j = 0; j < n + m + morecounter; j++)
+                delta[j] -= ep[j + 1] * tmp[m];
         }
+        public void Show(int[] xnum, double[] b, double[,] Aunited, double[] min, double[] delta, double[] ep, int n, int m, bool finish)
+        {
+            for (int j = 0; j < n + m + 3 + morecounter; j++)
+            {
+                if (j == 0)
+                    dataGridView1.Rows[0].Cells[j].Value = "ХБ";
+                else
+                    dataGridView1.Rows[0].Cells[j].Value = "У" + (j - 1).ToString();
+                if (j == n + m + 2 + morecounter)
+                    dataGridView1.Rows[0].Cells[j].Value = "min";
+            }
 
-        public int I
-        {
-            get { return i; }
+            for (int i = 1; i <= m; i++)
+                dataGridView1.Rows[i].Cells[0].Value = "x" + xnum[i - 1].ToString();
+            for (int i = 1; i <= m; i++)
+                dataGridView1.Rows[i].Cells[1].Value = Math.Round(b[i - 1],2).ToString();
+            for (int i = 1; i <= m; i++)
+                for (int j = 0; j < n + m + morecounter; j++)
+                    dataGridView1.Rows[i].Cells[j + 2].Value = Math.Round(Aunited[i - 1, j],2).ToString();
+            for (int i = 1; i <= m; i++)
+            {
+                if (finish == false)
+                    if (min[i-1] != -1)
+                        dataGridView1.Rows[i].Cells[n + m + 2 + morecounter].Value = Math.Round(min[i - 1], 2).ToString();
+                    else
+                        dataGridView1.Rows[i].Cells[n + m + 2 + morecounter].Value = "";
+                else
+                    dataGridView1.Rows[i].Cells[n + m + 2 + morecounter].Value = "";
+            }
+            for (int j = 0; j < n + m + 2 + morecounter; j++)
+            {
+                if (j == 0)
+                    dataGridView1.Rows[dataGridView1.RowCount - 2].Cells[j].Value = "delta";
+                else
+                {
+                    if (j == 1)
+                        dataGridView1.Rows[dataGridView1.RowCount - 2].Cells[j].Value = "-";
+                    else
+                        dataGridView1.Rows[dataGridView1.RowCount - 2].Cells[j].Value = Math.Round(delta[j - 2],2).ToString();
+                }
+            }
+            for (int j = 0; j < n + m + 2 + morecounter; j++)
+            {
+                if (j == 0)
+                    dataGridView1.Rows[dataGridView1.RowCount - 1].Cells[j].Value = "epsilon";
+                else
+                    if (finish == false)
+                        dataGridView1.Rows[dataGridView1.RowCount - 1].Cells[j].Value = Math.Round(ep[j - 1],2).ToString();
+                    else
+                        dataGridView1.Rows[dataGridView1.RowCount - 1].Cells[j].Value = "";
+            }
         }
-        public int J
+        public double ff(int[] xnum, double[] b, int n, int m, string helpx)
         {
-            get { return j; }
+            double answer = 0;
+            for (int i = 0; i < xnum.Length; i++)
+                for (int j = 0; j < helpx.Length; j++)
+                    if (xnum[i] == Convert.ToInt32(helpx[j].ToString()))
+                        answer += b[i];
+            return -1 * answer;
         }
-        public bool IEXIST
+        public double f(int[] xnum, double[] b, int n, int m, double[] coeffs)
         {
-            get { return iexist; }
-            set { iexist = value; }
-        }
-        public bool JEXIST
-        {
-            get { return jexist; }
-            set { jexist = value; }
-        }
-    }
-    class Way//для задания означенного цикла
-    {
-        int i, j;
-        public Way(int i, int j)
-        {
-            this.i = i;
-            this.j = j;
-        }
-
-        public int I
-        {
-            get { return i; }
-        }
-        public int J
-        {
-            get { return j; }
+            double answer = 0;
+            double[] answerX = new double[n + m + morecounter];
+            for (int i = 0; i < xnum.Length; i++)
+                answerX[xnum[i] - 1] = b[i];
+            for (int i = 0; i < coeffs.Length; i++)
+                answer += answerX[i] * coeffs[i];
+            return answer;
         }
     }
 }
